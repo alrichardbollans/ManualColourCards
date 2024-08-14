@@ -7,14 +7,17 @@ _inputs_path = 'inputs'
 if not os.path.isdir(_inputs_path):
     os.mkdir(_inputs_path)
 
-_manual_detected_card_img_file = os.path.join(_inputs_path, "cropped_image.jpg")
+_manual_detected_card_img_file = os.path.join(_inputs_path, "_manual_detected_card.png")
 
 
-def manual_find_colour_card(image_path):
+def manual_find_colour_card(image_path, outfile:str = None):
+    if outfile is None:
+        outfile = _manual_detected_card_img_file
+
     # Remove any previous versions
     try:
-        os.remove(_manual_detected_card_img_file)
-        print(f'Removed old detected image: {_manual_detected_card_img_file}')
+        os.remove(outfile)
+        print(f'Removed old detected image: {outfile}')
     except OSError:
         pass
 
@@ -69,7 +72,8 @@ def manual_find_colour_card(image_path):
         # plt.show()
 
         # Save the cropped image to load later
-        mpimg.imsave(_manual_detected_card_img_file, card)
+
+        mpimg.imsave(outfile, card)
 
     else:
         raise ValueError("Error: Less than 4 corners were selected.")
@@ -154,14 +158,25 @@ def match_histograms_mod(inputCard, referenceCard, fullImage):
 def match_images():
     # Methods from: https://github.com/dazzafact/image_color_correction/tree/main
     # write image of card in source image
-    manual_find_colour_card(args["input"])
-    # importing one of these breaks the manual colour card finder
-    import cv2
+
+    if args["colourfromsource"] is not None:
+        # If a file is already specified for the source colour card, read it if it exists or create one if not.
+        if os.path.isfile(args["colourfromsource"]):
+            import cv2
+            image_colour_card = cv2.imread(args["colourfromsource"])
+        else:
+            manual_find_colour_card(args["input"], args["colourfromsource"])
+            import cv2
+            image_colour_card = cv2.imread(args["colourfromsource"])
+    else:
+        manual_find_colour_card(args["input"])
+        # importing cv2 breaks the manual colour card finder
+        import cv2
+        image_colour_card = cv2.imread(_manual_detected_card_img_file)
 
     print("[INFO] loading images...")
     ref_colour_card = cv2.imread(os.path.join(_inputs_path, "reference_card.png"))
     image = cv2.imread(args["input"])
-    image_colour_card = cv2.imread(_manual_detected_card_img_file)
 
     # apply histogram matching from the color matching card in the
     # reference image to the color matching card in the input image
@@ -184,5 +199,8 @@ if __name__ == '__main__':
                     help="path to the input image to apply color correction to")
     ap.add_argument("-o", "--output", required=True,
                     help="path to save the corrected output image to")
+    ap.add_argument("-c", "--colourfromsource", required=False,
+                    help="specify a filepath where a colour card has been previously extracted."
+                         "This allows repetitions of calibrations across batches. If no file exists, the program will create one based on your annotation.")
     args = vars(ap.parse_args())
     main()
